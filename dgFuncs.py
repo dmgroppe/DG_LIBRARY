@@ -59,6 +59,7 @@ def boxcar_move_avg(x, wind_len, wind_step):
         ctr=ctr+wind_step
     return y/N
 
+
 def running_mean(x, N):
     """ smoothed_x=running_mean(x, N)
     Applies an N-length boxcar moving average to x.
@@ -78,6 +79,7 @@ def be_focused(minutes=15):
     for a in range(10):
         print('\a')
     return None
+
 
 def normalize(data,zero_nans=False, verbose=True):
     """ data should be variables x observations 
@@ -214,6 +216,41 @@ def trimmed_normalize(data, pptn_trim, zero_nans=False, verbose=True):
 
     return dataMns, dataSDs
 
+
+def median_normalize(data, zero_nans=False, verbose=True):
+    """ data should be variables x observations
+        NaN values are ignored when computed mean and standard deviation and then zeroed AFTER data are z-scored.
+        (i.e., sample size*(1-2*pptn_trim) of the samples will be used to compute mean and sd.
+        Inf values are converted to NaNs
+
+        NOTE, modifications to data are done in place! Create a copy if you want to keep the original values
+        """
+
+    # Convert any inf values to NaNs
+    data[np.isinf(data)] = np.nan
+
+    # Substract the median of each feature and divide by IQR
+    nDim = data.shape[0]
+    nObs = data.shape[1]
+    if verbose==True:
+        print('{} dimensions'.format(nDim))
+        print('{} observations'.format(nObs))
+    dataMds = np.zeros(nDim)
+    dataIQRs = np.zeros(nDim)
+    for a in range(nDim):
+        if sum(np.isnan(data[a, :])) < nObs:
+            dataMds[a]=np.median(data[a, :])
+            dataIQRs[a]=sp.stats.iqr(data[a, :])
+            if dataIQRs[a] > np.finfo(float).eps:
+                # If IQR is not too small, divide by it
+                data[a, :] = (data[a, :] - dataMds[a]) / dataIQRs[a]
+            else:
+                # IQR is too small just subtract data median
+                data[a, :] = data[a, :] - dataMds[a]
+        if zero_nans == True:
+            data[a, np.isnan(data[a, :])] = 0
+
+    return dataMds, dataIQRs
 
 def sphereCntrData(X,pvaKeep=1,epsilon=1E-18):
     """ Add comments??

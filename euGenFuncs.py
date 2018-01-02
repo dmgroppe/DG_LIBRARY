@@ -12,7 +12,7 @@ def chan_labels_from_fname(in_file):
     chan_label=jf_splt[1]+'-'+jf_splt[2]
     return chan_label
 
-def data_size_and_fnames(sub_list, ftr_root, ftr):
+def data_size_and_fnames(sub_list, ftr_root, ftr, dsamp_pcnt=1):
     """ Get size of data (and filenames) """
     grand_non_fnames = list()
     grand_szr_fnames = list()
@@ -54,7 +54,7 @@ def data_size_and_fnames(sub_list, ftr_root, ftr):
             #             in_file=os.path.join(ftr_path,f)
             #             temp_ftrs=sio.loadmat(in_file)
             temp_ftrs = sio.loadmat(f)
-            n_non_wind += temp_ftrs['nonszr_se_ftrs'].shape[1]
+            n_non_wind += int(np.round(dsamp_pcnt*temp_ftrs['nonszr_se_ftrs'].shape[1]))
             if ftr_dim == 0:
                 ftr_dim = temp_ftrs['nonszr_se_ftrs'].shape[0]
             elif ftr_dim != temp_ftrs['nonszr_se_ftrs'].shape[0]:
@@ -68,7 +68,7 @@ def data_size_and_fnames(sub_list, ftr_root, ftr):
             #             in_file=os.path.join(ftr_path,f)
             #             temp_ftrs=sio.loadmat(in_file)
             temp_ftrs = sio.loadmat(f)
-            n_szr_wind += temp_ftrs['se_ftrs'].shape[1]
+            n_szr_wind += int(np.round(dsamp_pcnt*temp_ftrs['se_ftrs'].shape[1]))
         print('%d total # of SZR time windows for this sub' % n_szr_wind)
 
         grand_non_fnames += non_fnames
@@ -89,7 +89,7 @@ def data_size_and_fnames(sub_list, ftr_root, ftr):
 
     return ftr_info_dict
 
-def import_data(szr_fnames, non_fnames, szr_subs, non_subs, n_szr_wind, n_non_wind, ftr_dim):
+def import_data(szr_fnames, non_fnames, szr_subs, non_subs, n_szr_wind, n_non_wind, ftr_dim, dsamp_pcnt=1):
     # ftr_path=os.path.join(ftr_root,str(sub))
 
     # Preallocate memory
@@ -112,15 +112,45 @@ def import_data(szr_fnames, non_fnames, szr_subs, non_subs, n_szr_wind, n_non_wi
         temp_ftrs = sio.loadmat(subsamp_f)
         raw_ftrs = temp_ftrs['subsamp_se_ftrs']
         # Z-score features USE THE CODE BELOW
-        temp_mns, temp_sds = dg.trimmed_normalize(raw_ftrs, 0.25, zero_nans=False, verbose=False) #normalization is done in place
+        # ORIG NORMALIZATION: Remove 50% most extreme points and then z-score
+        # temp_mns, temp_sds = dg.trimmed_normalize(raw_ftrs, 0.25, zero_nans=False, verbose=False) #normalization is done in place
+        # mns_dict[chan_label] = temp_mns
+        # sds_dict[chan_label] = temp_sds
+
+        # This subtracts the median from each time series and divides by the IQR
+        print('Subtracting median and dividing by IQR')
+        temp_mns, temp_sds = dg.median_normalize(raw_ftrs, zero_nans=False, verbose=False)  # normalization is done in place
         mns_dict[chan_label] = temp_mns
         sds_dict[chan_label] = temp_sds
+        # raw ftrs is ftr x time window
+
+        # Load normalization parameters that will further rescale and recenter data
+        # to get informative range from -3.99 to 3.99
+        # TODO fix path
+        path_dict = ief.get_path_dict()
+        nrm_fname=os.path.join(path_dict['szr_ant_root'],'EU_GENERAL','KDOWNSAMP','norm_factors.npz')
+        #npz_nrm=np.load('/Users/davidgroppe/PycharmProjects/SZR_ANT/EU_GENERAL/KDOWNSAMP/norm_factors.npz')
+        npz_nrm = np.load(nrm_fname)
+        upper_bnd=3.99
+        lower_bnd=-3.99
+        for ftr_ct in range(raw_ftrs.shape[0]):
+            # TODO make sure features in npz_nrm match ftrs of current data
+            #raw_ftrs[ftr_ct,:]=(raw_ftrs[ftr_ct,:]-npz_nrm['cntr'][ftr_ct])/npz_nrm['div_fact'][ftr_ct]
+            raw_ftrs[ftr_ct, :] = raw_ftrs[ftr_ct, :]/ npz_nrm['div_fact'][ftr_ct]
+            raw_ftrs[ftr_ct, :] = raw_ftrs[ftr_ct, :] - npz_nrm['cntr'][ftr_ct]
+
+            raw_ftrs[ftr_ct,raw_ftrs[ftr_ct,:]>upper_bnd]=upper_bnd # set max possible value
+            raw_ftrs[ftr_ct, raw_ftrs[ftr_ct, :] < lower_bnd] = lower_bnd  # set min possible value
+            print('Min/Max ftr %f %f' % (np.min(raw_ftrs[ftr_ct, :]),np.max(raw_ftrs[ftr_ct, :])))
+
+        # Truncate all values greater>3.9
 
         # Load nonszr data
         print('Loading file %s' % f)
         temp_ftrs = sio.loadmat(f)
-        temp_n_wind = temp_ftrs['nonszr_se_ftrs'].shape[1]
-        raw_ftrs = temp_ftrs['nonszr_se_ftrs']
+        temp_n_wind = int(np.round(temp_ftrs['nonszr_se_ftrs'].shape[1]*dsamp_pcnt))
+        temp_wind_ids=np.random.permutation(temp_ftrs['nonszr_se_ftrs'].shape[1])[:temp_n_wind]
+        raw_ftrs = temp_ftrs['nonszr_se_ftrs'][:,temp_wind_ids]
         # Z-score based on trimmed subsampled means, SDs
         dg.applyNormalize(raw_ftrs, mns_dict[chan_label], sds_dict[chan_label])
         ftrs[:, ptr:ptr + temp_n_wind] = raw_ftrs
@@ -134,8 +164,9 @@ def import_data(szr_fnames, non_fnames, szr_subs, non_subs, n_szr_wind, n_non_wi
         chan_label = str(szr_subs[f_ct]) + '_' + chan_labels_from_fname(f)
 
         temp_ftrs = sio.loadmat(f)
-        temp_n_wind = temp_ftrs['se_ftrs'].shape[1]
-        raw_ftrs = temp_ftrs['se_ftrs']
+        temp_n_wind = int(np.round(temp_ftrs['se_ftrs'].shape[1]*dsamp_pcnt))
+        temp_wind_ids = np.random.permutation(temp_ftrs['se_ftrs'].shape[1])[:temp_n_wind]
+        raw_ftrs = temp_ftrs['se_ftrs'][:,temp_wind_ids]
         # Z-score based on trimmed subsampled means, SDs
         dg.applyNormalize(raw_ftrs, mns_dict[chan_label], sds_dict[chan_label])
 
