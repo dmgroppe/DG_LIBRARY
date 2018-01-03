@@ -89,6 +89,27 @@ def data_size_and_fnames(sub_list, ftr_root, ftr, dsamp_pcnt=1):
 
     return ftr_info_dict
 
+
+def lim_ftr_range(raw_ftrs):
+    # Load normalization parameters that will further rescale and recenter data
+    # to get informative range from -3.99 to 3.99
+    path_dict = ief.get_path_dict()
+    nrm_fname=os.path.join(path_dict['szr_ant_root'],'EU_GENERAL','KDOWNSAMP','norm_factors.npz')
+    #npz_nrm=np.load('/Users/davidgroppe/PycharmProjects/SZR_ANT/EU_GENERAL/KDOWNSAMP/norm_factors.npz')
+    npz_nrm = np.load(nrm_fname)
+    upper_bnd=3.99
+    lower_bnd=-3.99
+    for ftr_ct in range(raw_ftrs.shape[0]):
+        # TODO make sure features in npz_nrm match ftrs of current data
+        #raw_ftrs[ftr_ct,:]=(raw_ftrs[ftr_ct,:]-npz_nrm['cntr'][ftr_ct])/npz_nrm['div_fact'][ftr_ct]
+        raw_ftrs[ftr_ct, :] = raw_ftrs[ftr_ct, :]/npz_nrm['div_fact'][ftr_ct]
+        raw_ftrs[ftr_ct, :] = raw_ftrs[ftr_ct, :] + npz_nrm['cntr'][ftr_ct]
+
+        raw_ftrs[ftr_ct,raw_ftrs[ftr_ct,:]>upper_bnd]=upper_bnd # set max possible value
+        raw_ftrs[ftr_ct, raw_ftrs[ftr_ct, :] < lower_bnd] = lower_bnd  # set min possible value
+        #print('Min/Max ftr %f %f' % (np.min(raw_ftrs[ftr_ct, :]),np.max(raw_ftrs[ftr_ct, :])))
+
+
 def import_data(szr_fnames, non_fnames, szr_subs, non_subs, n_szr_wind, n_non_wind, ftr_dim, dsamp_pcnt=1):
     # ftr_path=os.path.join(ftr_root,str(sub))
 
@@ -124,26 +145,6 @@ def import_data(szr_fnames, non_fnames, szr_subs, non_subs, n_szr_wind, n_non_wi
         sds_dict[chan_label] = temp_sds
         # raw ftrs is ftr x time window
 
-        # Load normalization parameters that will further rescale and recenter data
-        # to get informative range from -3.99 to 3.99
-        # TODO fix path
-        path_dict = ief.get_path_dict()
-        nrm_fname=os.path.join(path_dict['szr_ant_root'],'EU_GENERAL','KDOWNSAMP','norm_factors.npz')
-        #npz_nrm=np.load('/Users/davidgroppe/PycharmProjects/SZR_ANT/EU_GENERAL/KDOWNSAMP/norm_factors.npz')
-        npz_nrm = np.load(nrm_fname)
-        upper_bnd=3.99
-        lower_bnd=-3.99
-        for ftr_ct in range(raw_ftrs.shape[0]):
-            # TODO make sure features in npz_nrm match ftrs of current data
-            #raw_ftrs[ftr_ct,:]=(raw_ftrs[ftr_ct,:]-npz_nrm['cntr'][ftr_ct])/npz_nrm['div_fact'][ftr_ct]
-            raw_ftrs[ftr_ct, :] = raw_ftrs[ftr_ct, :]/ npz_nrm['div_fact'][ftr_ct]
-            raw_ftrs[ftr_ct, :] = raw_ftrs[ftr_ct, :] - npz_nrm['cntr'][ftr_ct]
-
-            raw_ftrs[ftr_ct,raw_ftrs[ftr_ct,:]>upper_bnd]=upper_bnd # set max possible value
-            raw_ftrs[ftr_ct, raw_ftrs[ftr_ct, :] < lower_bnd] = lower_bnd  # set min possible value
-            print('Min/Max ftr %f %f' % (np.min(raw_ftrs[ftr_ct, :]),np.max(raw_ftrs[ftr_ct, :])))
-
-        # Truncate all values greater>3.9
 
         # Load nonszr data
         print('Loading file %s' % f)
@@ -153,6 +154,7 @@ def import_data(szr_fnames, non_fnames, szr_subs, non_subs, n_szr_wind, n_non_wi
         raw_ftrs = temp_ftrs['nonszr_se_ftrs'][:,temp_wind_ids]
         # Z-score based on trimmed subsampled means, SDs
         dg.applyNormalize(raw_ftrs, mns_dict[chan_label], sds_dict[chan_label])
+        lim_ftr_range(raw_ftrs) # re-normalize and truncate to -3.99 to 3.99
         ftrs[:, ptr:ptr + temp_n_wind] = raw_ftrs
         targ_labels[ptr:ptr + temp_n_wind] = 0
         sub_ids[ptr:ptr + temp_n_wind] = non_subs[f_ct]
@@ -169,10 +171,29 @@ def import_data(szr_fnames, non_fnames, szr_subs, non_subs, n_szr_wind, n_non_wi
         raw_ftrs = temp_ftrs['se_ftrs'][:,temp_wind_ids]
         # Z-score based on trimmed subsampled means, SDs
         dg.applyNormalize(raw_ftrs, mns_dict[chan_label], sds_dict[chan_label])
+        lim_ftr_range(raw_ftrs) # re-normalize and truncate to -3.99 to 3.99
 
         ftrs[:, ptr:ptr + temp_n_wind] = raw_ftrs
         targ_labels[ptr:ptr + temp_n_wind] = 1
         sub_ids[ptr:ptr + temp_n_wind] = szr_subs[f_ct]
         ptr += temp_n_wind
+
+    # Load normalization parameters that will further rescale and recenter data
+    # to get informative range from -3.99 to 3.99
+    # path_dict = ief.get_path_dict()
+    # nrm_fname=os.path.join(path_dict['szr_ant_root'],'EU_GENERAL','KDOWNSAMP','norm_factors.npz')
+    # #npz_nrm=np.load('/Users/davidgroppe/PycharmProjects/SZR_ANT/EU_GENERAL/KDOWNSAMP/norm_factors.npz')
+    # npz_nrm = np.load(nrm_fname)
+    # upper_bnd=3.99
+    # lower_bnd=-3.99
+    # for ftr_ct in range(raw_ftrs.shape[0]):
+    #     # TODO make sure features in npz_nrm match ftrs of current data
+    #     #raw_ftrs[ftr_ct,:]=(raw_ftrs[ftr_ct,:]-npz_nrm['cntr'][ftr_ct])/npz_nrm['div_fact'][ftr_ct]
+    #     raw_ftrs[ftr_ct, :] = raw_ftrs[ftr_ct, :]/ npz_nrm['div_fact'][ftr_ct]
+    #     raw_ftrs[ftr_ct, :] = raw_ftrs[ftr_ct, :] - npz_nrm['cntr'][ftr_ct]
+    #
+    #     raw_ftrs[ftr_ct,raw_ftrs[ftr_ct,:]>upper_bnd]=upper_bnd # set max possible value
+    #     raw_ftrs[ftr_ct, raw_ftrs[ftr_ct, :] < lower_bnd] = lower_bnd  # set min possible value
+    #     print('Min/Max ftr %f %f' % (np.min(raw_ftrs[ftr_ct, :]),np.max(raw_ftrs[ftr_ct, :])))
 
     return ftrs.T, targ_labels, sub_ids
