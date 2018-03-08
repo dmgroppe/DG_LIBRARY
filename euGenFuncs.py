@@ -47,6 +47,14 @@ def data_size_and_fnames(sub_list, ftr_root, ftr, dsamp_pcnt=1):
         print('%d non-szr files found' % len(non_fnames))
         print('%d szr files found' % len(szr_fnames))
 
+        if ftr=='PLV_SE':
+            n_ftrs=2
+        elif ftr=='SE':
+            n_ftrs=1
+        else:
+            print('Unrecognized feature %s' % ftr)
+            exit()
+
         # Loop over NON-szr files to get total # of windows
         n_non_wind = 0
         ftr_dim = 0
@@ -56,8 +64,8 @@ def data_size_and_fnames(sub_list, ftr_root, ftr, dsamp_pcnt=1):
             temp_ftrs = sio.loadmat(f)
             n_non_wind += int(np.round(dsamp_pcnt*temp_ftrs['nonszr_se_ftrs'].shape[1]))
             if ftr_dim == 0:
-                ftr_dim = temp_ftrs['nonszr_se_ftrs'].shape[0]
-            elif ftr_dim != temp_ftrs['nonszr_se_ftrs'].shape[0]:
+                ftr_dim = temp_ftrs['nonszr_se_ftrs'].shape[0]*n_ftrs
+            elif ftr_dim != temp_ftrs['nonszr_se_ftrs'].shape[0]*n_ftrs:
                 raise ValueError('# of features in file does match previous files')
 
         print('%d total # of NON-szr time windows for this sub' % n_non_wind)
@@ -110,13 +118,16 @@ def lim_ftr_range(raw_ftrs):
         #print('Min/Max ftr %f %f' % (np.min(raw_ftrs[ftr_ct, :]),np.max(raw_ftrs[ftr_ct, :])))
 
 
-def import_data(szr_fnames, non_fnames, szr_subs, non_subs, n_szr_wind, n_non_wind, ftr_dim, dsamp_pcnt=1):
+def import_data(szr_fnames, non_fnames, szr_subs, non_subs, n_szr_wind, n_non_wind, ftr_dim, dsamp_pcnt=1, bnded=True):
     # ftr_path=os.path.join(ftr_root,str(sub))
 
     # Preallocate memory
     ftrs = np.zeros((ftr_dim, n_szr_wind + n_non_wind))
     targ_labels = np.zeros(n_szr_wind + n_non_wind)
     sub_ids=np.zeros(n_szr_wind + n_non_wind)
+
+    if ftr_dim==60:
+        using_plv=True
 
     # Import non-szr data
     ptr = 0
@@ -128,15 +139,22 @@ def import_data(szr_fnames, non_fnames, szr_subs, non_subs, n_szr_wind, n_non_wi
         print(chan_label)
         chan_list.append(chan_label)
 
-        # Load subsampled data (possibly contains both szr and non-szr data)
-        subsamp_f=f[:-7]+'subsamp.mat'
-        temp_ftrs = sio.loadmat(subsamp_f)
-        raw_ftrs = temp_ftrs['subsamp_se_ftrs']
-        # Z-score features USE THE CODE BELOW
-        # ORIG NORMALIZATION: Remove 50% most extreme points and then z-score
-        # temp_mns, temp_sds = dg.trimmed_normalize(raw_ftrs, 0.25, zero_nans=False, verbose=False) #normalization is done in place
-        # mns_dict[chan_label] = temp_mns
-        # sds_dict[chan_label] = temp_sds
+        if using_plv==False:
+            # Load subsampled data (possibly contains both szr and non-szr data)
+            subsamp_f=f[:-7]+'subsamp.mat'
+            temp_ftrs = sio.loadmat(subsamp_f)
+            raw_ftrs = temp_ftrs['subsamp_se_ftrs']
+            # Z-score features USE THE CODE BELOW
+            # ORIG NORMALIZATION: Remove 50% most extreme points and then z-score
+            # temp_mns, temp_sds = dg.trimmed_normalize(raw_ftrs, 0.25, zero_nans=False, verbose=False) #normalization is done in place
+            # mns_dict[chan_label] = temp_mns
+            # sds_dict[chan_label] = temp_sds
+        else:
+            # For SE+PLV features I didn't have time to randomly subsample the data (both ictal and nonictal),
+            # so I normalize by nonszr samples
+            temp_ftrs = sio.loadmat(f)
+            raw_ftrs = np.concatenate((temp_ftrs['nonszr_se_ftrs'], temp_ftrs['nonszr_plv_ftrs']))
+
 
         # This subtracts the median from each time series and divides by the IQR
         print('Subtracting median and dividing by IQR')
@@ -151,10 +169,13 @@ def import_data(szr_fnames, non_fnames, szr_subs, non_subs, n_szr_wind, n_non_wi
         temp_ftrs = sio.loadmat(f)
         temp_n_wind = int(np.round(temp_ftrs['nonszr_se_ftrs'].shape[1]*dsamp_pcnt))
         temp_wind_ids=np.random.permutation(temp_ftrs['nonszr_se_ftrs'].shape[1])[:temp_n_wind]
-        raw_ftrs = temp_ftrs['nonszr_se_ftrs'][:,temp_wind_ids]
+        if ftr_dim==60:
+            raw_ftrs =np.concatenate((temp_ftrs['nonszr_se_ftrs'][:, temp_wind_ids], temp_ftrs['nonszr_plv_ftrs'][:, temp_wind_ids]))
+        else:
+            raw_ftrs = temp_ftrs['nonszr_se_ftrs'][:,temp_wind_ids]
         # Z-score based on trimmed subsampled means, SDs
         dg.applyNormalize(raw_ftrs, mns_dict[chan_label], sds_dict[chan_label])
-        lim_ftr_range(raw_ftrs) # re-normalize and truncate to -3.99 to 3.99
+        #if bnded: ?? TODO use lim_ftr_range(raw_ftrs) # re-normalize and truncate to -3.99 to 3.99
         ftrs[:, ptr:ptr + temp_n_wind] = raw_ftrs
         targ_labels[ptr:ptr + temp_n_wind] = 0
         sub_ids[ptr:ptr + temp_n_wind] = non_subs[f_ct]
@@ -168,10 +189,13 @@ def import_data(szr_fnames, non_fnames, szr_subs, non_subs, n_szr_wind, n_non_wi
         temp_ftrs = sio.loadmat(f)
         temp_n_wind = int(np.round(temp_ftrs['se_ftrs'].shape[1]*dsamp_pcnt))
         temp_wind_ids = np.random.permutation(temp_ftrs['se_ftrs'].shape[1])[:temp_n_wind]
-        raw_ftrs = temp_ftrs['se_ftrs'][:,temp_wind_ids]
+        if ftr_dim == 60:
+            raw_ftrs = np.concatenate((temp_ftrs['se_ftrs'][:,temp_wind_ids],temp_ftrs['plv_ftrs'][:,temp_wind_ids]))
+        else:
+            raw_ftrs = temp_ftrs['se_ftrs'][:, temp_wind_ids]
         # Z-score based on trimmed subsampled means, SDs
         dg.applyNormalize(raw_ftrs, mns_dict[chan_label], sds_dict[chan_label])
-        lim_ftr_range(raw_ftrs) # re-normalize and truncate to -3.99 to 3.99
+        #if bnded TODO use ?? lim_ftr_range(raw_ftrs) # re-normalize and truncate to -3.99 to 3.99
 
         ftrs[:, ptr:ptr + temp_n_wind] = raw_ftrs
         targ_labels[ptr:ptr + temp_n_wind] = 1
