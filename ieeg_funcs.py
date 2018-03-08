@@ -18,7 +18,7 @@ def get_path_dict():
     if sys.platform=='linux':
         path_dict['ieeg_root']='/home/dgroppe/TWH_EEG'
         path_dict['eu_root'] = '/home/dgroppe/EU_MAT_DATA'
-        path_dict['eu_meta'] = '/home/dgroppe/GIT/SZR_ANT/EU_METADATA/'
+        path_dict['eu_meta'] = '/home/dgroppe/EU_METADATA/'
         path_dict['pics']='/home/dgroppe/GIT/SZR_ANT/PICS/' #TODO fix this
         path_dict['onset_csv'] = '/home/dgroppe/TWH_INFO/CLINICIAN_ONSET_TIMES'
         path_dict['ftrs_root'] = '/home/dgroppe/GIT/SZR_ANT/FTRS'
