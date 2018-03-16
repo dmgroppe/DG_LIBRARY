@@ -128,6 +128,8 @@ def import_data(szr_fnames, non_fnames, szr_subs, non_subs, n_szr_wind, n_non_wi
 
     if ftr_dim==60:
         using_plv=True
+    else:
+        using_plv = False
 
     # Import non-szr data
     ptr = 0
