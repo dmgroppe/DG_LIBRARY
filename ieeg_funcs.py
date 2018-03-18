@@ -18,7 +18,8 @@ def get_path_dict():
     if sys.platform=='linux':
         path_dict['ieeg_root']='/home/dgroppe/TWH_EEG'
         path_dict['eu_root'] = '/home/dgroppe/EU_MAT_DATA'
-        path_dict['eu_meta'] = '/home/dgroppe/EU_METADATA/'
+        #path_dict['eu_meta'] = '/home/dgroppe/EU_METADATA/'
+        path_dict['eu_meta'] = '/home/dgroppe/GIT/SZR_ANT/EU_METADATA/'
         path_dict['pics']='/home/dgroppe/GIT/SZR_ANT/PICS/' #TODO fix this
         path_dict['onset_csv'] = '/home/dgroppe/TWH_INFO/CLINICIAN_ONSET_TIMES'
         path_dict['ftrs_root'] = '/home/dgroppe/GIT/SZR_ANT/FTRS'
@@ -28,7 +29,8 @@ def get_path_dict():
         #path_dict['ieeg_root']='/Users/davidgroppe/ONGOING/SZR_SPREAD/PATIENTS/'
         path_dict['ieeg_root'] = '/Users/davidgroppe/ONGOING/TWH_EEG/'
         path_dict['eu_root'] = '/Users/davidgroppe/ONGOING/EU_EEG/'
-        path_dict['eu_meta'] = '/Users/davidgroppe/Dropbox/TWH_INFO/EU_METADATA/'
+        #path_dict['eu_meta'] = '/Users/davidgroppe/Dropbox/TWH_INFO/EU_METADATA/'
+        path_dict['eu_meta'] = '/Users/davidgroppe/PycharmProjects/SZR_ANT/EU_METADATA/'
         path_dict['pics']='/Users/davidgroppe/PycharmProjects/SZR_ANT/PICS/'
         path_dict['onset_csv'] = '/Users/davidgroppe/Dropbox/TWH_INFO/CLINICIAN_ONSET_TIMES'
         path_dict['ftrs_root'] = '/Users/davidgroppe/PycharmProjects/SZR_ANT/FTRS'
