@@ -108,7 +108,8 @@ def layread(layFileName,datFileName=None,timeOffset=0,timeLength=-1):
     # NOT IMPLEMENTED dn = datenum(strcat(date, ',', time));
     date = patient['testdate'].replace('.','/')
     tim = patient['testtime'].replace('.',':')
-    dt = time.strptime(date + ',' + tim,'%m/%d/%y,%H:%M:%S')
+    #dt = time.strptime(date + ',' + tim,'%m/%d/%y,%H:%M:%S') # TODO this was old code, perhaps format has changed?
+    dt = time.strptime(date + ',' + tim, '%Y/%m/%d,%H:%M:%S') #TODO double check
     dt = datetime.fromtimestamp(mktime(dt))
     dt = dt.strftime('%d-%b-%Y %H:%M:%S') # convert date and time to standard format
     header['starttime'] = dt
@@ -147,7 +148,7 @@ def layread(layFileName,datFileName=None,timeOffset=0,timeLength=-1):
             timesec = samplesec + sampletimes[i]['time']
             commenttime = time.strftime('%H:%M:%S',time.gmtime(timesec)) # should be converted to HH:MM:SS
             dn = patient['testdate'] + ',' + str(commenttime)
-            dn = time.strptime(dn,'%m/%d/%y,%H:%M:%S')
+            dn = time.strptime(dn,'%Y.%m.%d,%H:%M:%S') # TODO double check, I think also varies from older to newer cases
             dn = datetime.fromtimestamp(mktime(dn))
             dn = dn.strftime('%d-%b-%Y %H:%M:%S') # convert date and time to standard format
             annotations.append({'time':dn, 'sample': int(np.round(samplenumRaw)),'duration':float(contents[1]),'text':contents[4]})
