@@ -3,9 +3,165 @@ import numpy as np
 import pdb,traceback,sys
 import time
 import os
+import re
 from time import mktime
 from datetime import datetime
 
+######## USEFUL FUNCS ########
+def tidy_chan_names(channel_names):
+    tidy_names=list()
+    for chan in channel_names:
+        tidy_names.append(chan.split('-')[0])
+    return tidy_names
+
+def find_c_chans(channel_names,verbose=True):
+    keep_chan_ids=list()
+    c_chan_ids=list()
+    for ct, chan in enumerate(channel_names):
+        chans=chan.split('-')
+        match=re.search(r"^c[0-9]+",chans[0])
+        if match:
+            #print('found '+match.group()) ## 'found word:cat'
+            c_chan_ids.append(ct)
+        else:
+            keep_chan_ids.append(ct)
+    if verbose==True:
+        print('Removing %d c* chans as they are likely unused' % len(c_chan_ids))
+    return keep_chan_ids, c_chan_ids
+
+def rm_c_chans(ieeg,chan_names,verbose=True):
+    if verbose==True:
+        print('Total # of channels: %d' % ieeg.shape[0])
+    keep_chan_ids, c_chan_ids=find_c_chans(chan_names,verbose)
+    ieeg=ieeg[keep_chan_ids,:]
+    pruned_chan_names=[chan_names[i] for i in keep_chan_ids]
+    return ieeg, pruned_chan_names
+
+def rm_event_chan(ieeg,chan_names,verbose=True):
+    ev_id=None
+    for ct, chan in enumerate(chan_names):
+        if chan=='event':
+            ev_id=ct
+            break
+    if ev_id==None:
+        if verbose==True:
+            print('No "event" channel found.')
+    else:
+        if verbose==True:
+            print('Unique event channel values: {}'.format(np.unique(ieeg[ev_id,:])))
+            print('Removing event channel')
+        n_chan=ieeg.shape[0]
+        keep_chans=np.setdiff1d(np.arange(0,n_chan),ev_id)
+        ieeg=ieeg[keep_chans,:]
+        orig_chan_names=chan_names
+        chan_names=[orig_chan_names[i] for i in keep_chans]
+    return ieeg, chan_names
+
+def rm_noneeg_chan(ieeg,chan_names,verbose=True):
+    noneeg_ids=[]
+    for ct, chan in enumerate(chan_names):
+        if chan in ['osat-ref','pr-ref']:
+            noneeg_ids.append(ct)
+
+    if len(noneeg_ids)>0:
+        if verbose==True:
+            print('Removing these non-eeg channels:')
+            for a in noneeg_ids:
+                print(chan_names[a])
+        n_chan=ieeg.shape[0]
+        keep_chans=np.setdiff1d(np.arange(0,n_chan),np.asarray(noneeg_ids,dtype=int))
+        ieeg=ieeg[keep_chans,:]
+        orig_chan_names=chan_names
+        chan_names=[orig_chan_names[i] for i in keep_chans]
+    return ieeg, chan_names
+
+def avg_ref(ieeg):
+    print('Taking mean time series across all channels and subtracting it from each channel.')
+    mn=mn=np.mean(ieeg,axis=0)
+    n_chan=ieeg.shape[0]
+    for c in range(n_chan):
+        ieeg[c,:]=ieeg[c,:]-mn
+    return ieeg, mn
+
+def starttime_anon(starttime_str):
+    """Returns the start time minus the year (in order to anonymize it.
+    starttime_str should have a format like this '12-Jun-2001 08:44:52'
+    """
+    temp=starttime_str.split(' ')
+    return temp[0][:-5]+' '+temp[1]
+
+def sample_times_sec(sample_time_list,n_tpt,tstep_sec):
+    """ Returns a vector with the time of day (in seconds) corresponding to each time point of EEG data"""
+    # collect samples with time stamps
+    clocked_samples = list()
+    clocked_sample_times_sec = list()
+    for stime in sample_time_list:
+        clocked_samples.append(int(stime['sample']))
+        clocked_sample_times_sec.append(stime['time'])
+
+    time_of_day_sec=np.zeros(n_tpt)
+    for t in range(n_tpt):
+        if t in clocked_samples:
+            t_id=clocked_samples.index(t)
+            time_of_day_sec[t]=clocked_sample_times_sec[t_id]
+        else:
+            time_of_day_sec[t]=time_of_day_sec[t-1]+tstep_sec
+    return time_of_day_sec
+
+
+def prune_annotations(annot_list):
+    annot_lower = [annot['text'].lower().strip('\n') for annot in annot_list]
+
+    # Auto-remove some annotations
+    rm_events = ['xlspike','xlevent','start recording','video recording on','recording analyzer - xlevent - intracranial',
+                 'recording analyzer - xlspike - intracranial','recording analyzer - csa','recording analyzer - ecg',
+                 'clip note','started analyzer - xlevent / ecg','started analyzer - csa','started analyzer - xlspike',
+                 "please refer to electrode table in patient's folder about correct grid order"]
+    pruned_annot1 = []
+    pruned_annot1_lower = []
+    for ct, annot in enumerate(annot_lower):
+        if not (annot in rm_events):
+            pruned_annot1_lower.append(annot)
+            pruned_annot1.append(annot_list[ct])
+
+    # Ask user to manually select annotations to keep
+    all_done = False
+    n_annot = len(pruned_annot1_lower)
+    while all_done == False:
+        for ct, annot in enumerate(pruned_annot1_lower):
+            print('{}: {}'.format(ct, annot))
+        keep_str = input('Enter the indices of any annotations that should be kept (e.g., 1 2 13 or return for none)')
+        if len(keep_str) > 0:
+            keep_ids = [int(str) for str in keep_str.split(' ')]
+            if np.max(keep_ids) >= n_annot or np.min(keep_ids) < 0:
+                print('WARNING: Removing ids greater than %d or less than 0' % n_annot)
+                temp_keep_ids = []
+                for id in keep_ids:
+                    if id < n_annot and id >= 0:
+                        temp_keep_ids.append(id)
+                keep_ids = list(temp_keep_ids)
+                del temp_keep_ids
+        else:
+            keep_ids = []
+        if len(keep_ids) == 0:
+            print('Removing all annotations')
+        else:
+            print('Keeping the following annotations:')
+            for id in keep_ids:
+                print('{}: {}'.format(id, pruned_annot1_lower[id]))
+        valid_response = False
+        while valid_response == False:
+            double_check = input('Redo or continue (r/c)?')
+            if double_check.lower() == 'r':
+                valid_response = True
+            elif double_check.lower() == 'c':
+                valid_response = True
+                all_done = True
+    pruned_annot = [pruned_annot1[id] for id in keep_ids]
+    return pruned_annot
+
+
+######## MAIN FUNC ########
 def layread(layFileName,datFileName=None,timeOffset=0,timeLength=-1):
     """
     Required Input:
@@ -30,6 +186,8 @@ def layread(layFileName,datFileName=None,timeOffset=0,timeLength=-1):
             waveformcount: # of channels
             patient: dict of patient information (mostly empty)
         record - EEG data from .dat file (channel x time numpy array)
+
+        Note that the header is the same no matter what length of data are sampled from the dat file.
     """
 
     # takes ~8 min for a 1.5GB file
@@ -108,8 +266,11 @@ def layread(layFileName,datFileName=None,timeOffset=0,timeLength=-1):
     # NOT IMPLEMENTED dn = datenum(strcat(date, ',', time));
     date = patient['testdate'].replace('.','/')
     tim = patient['testtime'].replace('.',':')
-    #dt = time.strptime(date + ',' + tim,'%m/%d/%y,%H:%M:%S') # TODO this was old code, perhaps format has changed?
-    dt = time.strptime(date + ',' + tim, '%Y/%m/%d,%H:%M:%S') #TODO double check
+    try:
+        #dt = time.strptime(date + ',' + tim,'%m/%d/%y,%H:%M:%S') # TODO this was old code, perhaps format has changed?
+        dt = time.strptime(date + ',' + tim, '%Y/%m/%d,%H:%M:%S') #TODO double check
+    except:
+        raise Exception('Error converting start time to datetime object. Try using the older month-first format.')
     dt = datetime.fromtimestamp(mktime(dt))
     dt = dt.strftime('%d-%b-%Y %H:%M:%S') # convert date and time to standard format
     header['starttime'] = dt
