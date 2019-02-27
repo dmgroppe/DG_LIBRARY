@@ -31,6 +31,11 @@ def randTpts(nTptsTotal,nTptsShow):
     return randSubset
 
 
+def randVals(seq,n=5):
+    """ Useful for getting random ids from a sample; ids are NOT contiguous"""
+    return seq[np.random.permutation(len(seq))[:n]]
+
+
 def asin_trans(data, output_degrees=False):
     """ Performs arcsin transformation to make 0-1 range data more normal.
     data should range from 0-1. Output ranges from 0 to pi/2"""

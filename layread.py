@@ -14,6 +14,15 @@ def tidy_chan_names(channel_names):
         tidy_names.append(chan.split('-')[0])
     return tidy_names
 
+def get_eeg_chan_names(channel_names):
+    (keep_chan_ids, c_chan_ids)=find_c_chans(channel_names,verbose=False)
+    eeg_chan_names=list()
+    non_eeg_chans=['event','osat-ref','pr-ref']
+    for id in keep_chan_ids:
+        if channel_names[id] not in non_eeg_chans:
+            eeg_chan_names.append(channel_names[id])
+    return tidy_chan_names(eeg_chan_names)
+
 def find_c_chans(channel_names,verbose=True):
     keep_chan_ids=list()
     c_chan_ids=list()
@@ -75,6 +84,7 @@ def rm_noneeg_chan(ieeg,chan_names,verbose=True):
         chan_names=[orig_chan_names[i] for i in keep_chans]
     return ieeg, chan_names
 
+
 def avg_ref(ieeg):
     print('Taking mean time series across all channels and subtracting it from each channel.')
     mn=mn=np.mean(ieeg,axis=0)
@@ -83,12 +93,14 @@ def avg_ref(ieeg):
         ieeg[c,:]=ieeg[c,:]-mn
     return ieeg, mn
 
+
 def starttime_anon(starttime_str):
     """Returns the start time minus the year (in order to anonymize it.
     starttime_str should have a format like this '12-Jun-2001 08:44:52'
     """
     temp=starttime_str.split(' ')
     return temp[0][:-5]+' '+temp[1]
+
 
 def sample_times_sec(sample_time_list,n_tpt,tstep_sec):
     """ Returns a vector with the time of day (in seconds) corresponding to each time point of EEG data"""
@@ -162,19 +174,22 @@ def prune_annotations(annot_list):
 
 
 ######## MAIN FUNC ########
-def layread(layFileName,datFileName=None,timeOffset=0,timeLength=-1):
+def layread(layFileName,datFileName=None,timeOffset=0,timeLength=-1,importDat=True):
     """
     Required Input:
         layFileName - the .lay file name (including path)
 
     Optional Inputs:
-        datFileName - the .dat file name. Default: assume the same path and file stem as layFileName
+        datFileName - the .dat file name.
         timeOffset - the number of time steps to ignore (so if this was set to 3 for example, the file reader would extract data for time steps 4 to the end)
         timeLength - the number of time steps to read (so if this was set to 5 and timeOffset was set to 3, the file reader would read data for time steps 4,5,6,7,8). If this parameter is set to -1, then the whole .dat file is read.
+        importDat - Boolean. If True, the time series data in the dat file are imported
 
-    default values:
+    Default values:
+        datFileName - Default: assume the same path and file stem as layFileName
         timeOffset=0 (i.e., start reading that beginning of the file)
         timeLength=-1 (i.e., read in entire file)
+        importDat=True
 
     outputs:
         header - information from .lay file. It contains the following keys:
@@ -333,34 +348,36 @@ def layread(layFileName,datFileName=None,timeOffset=0,timeLength=-1):
     header['rawheader'] = rawhdr # put raw header in header
 
     # dat file
-    try:
-        dat_file_ID = open(datFileName,'rb')
-    except:
-        raise Exception('Error in open: file not found')
-    recnum = float(rawhdr['fileinfo']['waveformcount'])
-    recnum = int(recnum)
-    calibration = float(rawhdr['fileinfo']['calibration'])
-    if int(rawhdr['fileinfo']['datatype']) == 7:
-        precision = np.int32
-        dat_file_ID.seek(recnum*4*timeOffset,1)
-    else:
-        precision = np.int16
-        dat_file_ID.seek(recnum*2*timeOffset,1)
+    record=[] # TODO make this an input option
+    if importDat:
+        try:
+            dat_file_ID = open(datFileName,'rb')
+        except:
+            raise Exception('Error in open: file not found')
+        recnum = float(rawhdr['fileinfo']['waveformcount'])
+        recnum = int(recnum)
+        calibration = float(rawhdr['fileinfo']['calibration'])
+        if int(rawhdr['fileinfo']['datatype']) == 7:
+            precision = np.int32
+            dat_file_ID.seek(recnum*4*timeOffset,1)
+        else:
+            precision = np.int16
+            dat_file_ID.seek(recnum*2*timeOffset,1)
 
-    # read data from .dat file into array of correct size, then calibrate
-    # records = recnum rows x inf columns
-    if timeLength == -1:
-        toRead = -1 # elements of size precision to read
-    else:
-        toRead = timeLength*recnum
-    record = np.fromfile(dat_file_ID,dtype=precision,count=toRead)
-    dat_file_ID.close()
-    record = record * calibration # explicit
-    record = np.reshape(record,(recnum,-1),'F') # recnum rows
-    record = record.astype(np.float32) # cast as float32; more than enough precision
+        # read data from .dat file into array of correct size, then calibrate
+        # records = recnum rows x inf columns
+        if timeLength == -1:
+            toRead = -1 # elements of size precision to read
+        else:
+            toRead = timeLength*recnum
+        record = np.fromfile(dat_file_ID,dtype=precision,count=toRead)
+        dat_file_ID.close()
+        record = record * calibration # explicit
+        record = np.reshape(record,(recnum,-1),'F') # recnum rows
+        record = record.astype(np.float32) # cast as float32; more than enough precision
 
-    # elapsed time (in min)
-    elapsed = (time.time() - t) / 60
+        # elapsed time (in min)
+        elapsed = (time.time() - t) / 60
 
     return (header,record)
 
