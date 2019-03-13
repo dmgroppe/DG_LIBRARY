@@ -113,11 +113,11 @@ def sample_times_sec(sample_time_list,n_tpt,tstep_sec):
 
     time_of_day_sec=np.zeros(n_tpt)
     for t in range(n_tpt):
-        if t in clocked_samples:
+        if t in clocked_samples: # this is the subset of samples with clock times, which is used for clock synchronization
             t_id=clocked_samples.index(t)
             time_of_day_sec[t]=clocked_sample_times_sec[t_id]
         else:
-            time_of_day_sec[t]=time_of_day_sec[t-1]+tstep_sec
+            time_of_day_sec[t]=time_of_day_sec[t-1]+tstep_sec # simply increment time of day by the time step
     return time_of_day_sec
 
 
@@ -378,6 +378,8 @@ def layread(layFileName,datFileName=None,timeOffset=0,timeLength=-1,importDat=Tr
 
         # elapsed time (in min)
         elapsed = (time.time() - t) / 60
+    else:
+        record=np.zeros((0,0))
 
     return (header,record)
 
