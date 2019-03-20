@@ -8,11 +8,45 @@ from time import mktime
 from datetime import datetime
 
 ######## USEFUL FUNCS ########
+def get_sample_times(layFileName):
+    data, sections, subsections = inifile.inifile(layFileName, 'readall')  # sections and subsections currently unused
+    for row in data:
+        for entry in row:
+            if entry == []:
+                entry = ''
+
+    # Read "sampletimes" section of lay file
+    sample_times = []  # list of dictionaries
+    for row in data:
+        if row[0] == 'sampletimes':
+            # print("sample: {}, time: {}".format(float(row[2]),float(row[3])))
+            sample_times.append({'sample': float(row[2]), 'time': float(row[3])})
+    return sample_times
+
+
+def get_srate(layFileName):
+    data, sections, subsections = inifile.inifile(layFileName, 'readall')  # sections and subsections currently unused
+    for row in data:
+        for entry in row:
+            if entry == []:
+                entry = ''
+    # find fileinfo section of .lay file
+    fileInfoArray = []
+    for row in data:
+        if row[0] == 'fileinfo':
+            fileInfoArray.append(row)
+    fileinfo = {}  # dictionary
+    for row in fileInfoArray:
+        fileinfo[row[2]] = row[3]
+    return int(fileinfo['samplingrate'])
+
+
 def tidy_chan_names(channel_names):
     tidy_names=list()
     for chan in channel_names:
         tidy_names.append(chan.split('-')[0])
     return tidy_names
+
 
 def get_eeg_chan_names(channel_names):
     (keep_chan_ids, c_chan_ids)=find_c_chans(channel_names,verbose=False)
@@ -85,9 +119,10 @@ def rm_noneeg_chan(ieeg,chan_names,verbose=True):
     return ieeg, chan_names
 
 
-def avg_ref(ieeg):
-    print('Taking mean time series across all channels and subtracting it from each channel.')
-    mn=mn=np.mean(ieeg,axis=0)
+def avg_ref(ieeg,report=True):
+    if report:
+        print('Taking mean time series across all channels and subtracting it from each channel.')
+    mn=np.mean(ieeg,axis=0)
     n_chan=ieeg.shape[0]
     for c in range(n_chan):
         ieeg[c,:]=ieeg[c,:]-mn
@@ -128,49 +163,49 @@ def prune_annotations(annot_list):
     rm_events = ['xlspike','xlevent','start recording','video recording on','recording analyzer - xlevent - intracranial',
                  'recording analyzer - xlspike - intracranial','recording analyzer - csa','recording analyzer - ecg',
                  'clip note','started analyzer - xlevent / ecg','started analyzer - csa','started analyzer - xlspike',
-                 "please refer to electrode table in patient's folder about correct grid order"]
+                 'persyst - license error','started analyzer - persyst',"please refer to electrode table in patient's folder about correct grid order"]
     pruned_annot1 = []
     pruned_annot1_lower = []
     for ct, annot in enumerate(annot_lower):
         if not (annot in rm_events):
             pruned_annot1_lower.append(annot)
             pruned_annot1.append(annot_list[ct])
-
     # Ask user to manually select annotations to keep
-    all_done = False
-    n_annot = len(pruned_annot1_lower)
-    while all_done == False:
-        for ct, annot in enumerate(pruned_annot1_lower):
-            print('{}: {}'.format(ct, annot))
-        keep_str = input('Enter the indices of any annotations that should be kept (e.g., 1 2 13 or return for none)')
-        if len(keep_str) > 0:
-            keep_ids = [int(str) for str in keep_str.split(' ')]
-            if np.max(keep_ids) >= n_annot or np.min(keep_ids) < 0:
-                print('WARNING: Removing ids greater than %d or less than 0' % n_annot)
-                temp_keep_ids = []
-                for id in keep_ids:
-                    if id < n_annot and id >= 0:
-                        temp_keep_ids.append(id)
-                keep_ids = list(temp_keep_ids)
-                del temp_keep_ids
-        else:
-            keep_ids = []
-        if len(keep_ids) == 0:
-            print('Removing all annotations')
-        else:
-            print('Keeping the following annotations:')
-            for id in keep_ids:
-                print('{}: {}'.format(id, pruned_annot1_lower[id]))
-        valid_response = False
-        while valid_response == False:
-            double_check = input('Redo or continue (r/c)?')
-            if double_check.lower() == 'r':
-                valid_response = True
-            elif double_check.lower() == 'c':
-                valid_response = True
-                all_done = True
-    pruned_annot = [pruned_annot1[id] for id in keep_ids]
-    return pruned_annot
+    # all_done = False
+    # n_annot = len(pruned_annot1_lower)
+    # while all_done == False:
+    #     for ct, annot in enumerate(pruned_annot1_lower):
+    #         print('{}: {}'.format(ct, annot))
+    #     keep_str = input('Enter the indices of any annotations that should be kept (e.g., 1 2 13 or return for none)')
+    #     if len(keep_str) > 0:
+    #         keep_ids = [int(str) for str in keep_str.split(' ')]
+    #         if np.max(keep_ids) >= n_annot or np.min(keep_ids) < 0:
+    #             print('WARNING: Removing ids greater than %d or less than 0' % n_annot)
+    #             temp_keep_ids = []
+    #             for id in keep_ids:
+    #                 if id < n_annot and id >= 0:
+    #                     temp_keep_ids.append(id)
+    #             keep_ids = list(temp_keep_ids)
+    #             del temp_keep_ids
+    #     else:
+    #         keep_ids = []
+    #     if len(keep_ids) == 0:
+    #         print('Removing all annotations')
+    #     else:
+    #         print('Keeping the following annotations:')
+    #         for id in keep_ids:
+    #             print('{}: {}'.format(id, pruned_annot1_lower[id]))
+    #     valid_response = False
+    #     while valid_response == False:
+    #         double_check = input('Redo or continue (r/c)?')
+    #         if double_check.lower() == 'r':
+    #             valid_response = True
+    #         elif double_check.lower() == 'c':
+    #             valid_response = True
+    #             all_done = True
+    # pruned_annot = [pruned_annot1[id] for id in keep_ids]
+    # return pruned_annot
+    return pruned_annot1
 
 
 ######## MAIN FUNC ########
@@ -261,6 +296,10 @@ def layread(layFileName,datFileName=None,timeOffset=0,timeLength=-1,importDat=Tr
     # sample: 0.0, time: 34273.799
     # sample: 454540.0, time: 36049.344
     # sample: 907040.0, time: 37816.922
+    # Note that time is is units of time of day in seconds. It doesn't cycle to 0 though for recordings that last past
+    # midnight; it just continues to increase past 60*60*24. Also note that interval between time samples does not appear
+    # to be fixed. In one 24 hr long file I looked at, time stamps were intially about .55 hours apart but then they were
+    # about .3 hours apart, with a few values in between.
 
     # channelmap
     channelmap = [] # list of strings
@@ -373,7 +412,7 @@ def layread(layFileName,datFileName=None,timeOffset=0,timeLength=-1,importDat=Tr
         record = np.fromfile(dat_file_ID,dtype=precision,count=toRead)
         dat_file_ID.close()
         record = record * calibration # explicit
-        record = np.reshape(record,(recnum,-1),'F') # recnum rows
+        record = np.reshape(record,(recnum,-1),'F') # recnum rows (i.e., the # of channels)
         record = record.astype(np.float32) # cast as float32; more than enough precision
 
         # elapsed time (in min)
