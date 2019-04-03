@@ -163,7 +163,9 @@ def prune_annotations(annot_list):
     rm_events = ['xlspike','xlevent','start recording','video recording on','recording analyzer - xlevent - intracranial',
                  'recording analyzer - xlspike - intracranial','recording analyzer - csa','recording analyzer - ecg',
                  'clip note','started analyzer - xlevent / ecg','started analyzer - csa','started analyzer - xlspike',
-                 'persyst - license error','started analyzer - persyst',"please refer to electrode table in patient's folder about correct grid order"]
+                 'persyst - license error','started analyzer - persyst',
+                 "please refer to electrode table in patient's folder about correct grid order",
+                 "Started Analyzer - XLEvent - Intracranial","Started Analyzer - XLSpike - Intracranial"]
     pruned_annot1 = []
     pruned_annot1_lower = []
     for ct, annot in enumerate(annot_lower):
@@ -235,9 +237,10 @@ def layread(layFileName,datFileName=None,timeOffset=0,timeLength=-1,importDat=Tr
             annotations: list of event annotations
             waveformcount: # of channels
             patient: dict of patient information (mostly empty)
-        record - EEG data from .dat file (channel x time numpy array)
+        record - EEG data from .dat file (channel x time numpy array; precision is numpy.float32)
 
         Note that the header is the same no matter what length of data are sampled from the dat file.
+        You could potentially reduce the precision to numpy.float16
     """
 
     # takes ~8 min for a 1.5GB file
@@ -397,9 +400,11 @@ def layread(layFileName,datFileName=None,timeOffset=0,timeLength=-1,importDat=Tr
         recnum = int(recnum)
         calibration = float(rawhdr['fileinfo']['calibration'])
         if int(rawhdr['fileinfo']['datatype']) == 7:
+            print('Layfile precision is 32 bit')
             precision = np.int32
             dat_file_ID.seek(recnum*4*timeOffset,1)
         else:
+            print('Layfile precision is 16 bit')
             precision = np.int16
             dat_file_ID.seek(recnum*2*timeOffset,1)
 
